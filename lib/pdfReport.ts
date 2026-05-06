@@ -449,7 +449,8 @@ export async function generateQuadasPDF(
   y += 14;
 
   // Tabela resumo
-  const tableRows: (string | { content: string; styles: { fillColor: number[]; textColor: number[]; fontStyle: string } })[][] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tableRows: any[][] = [];
 
   for (let di = 0; di < QUADAS2_DOMAINS.length; di++) {
     const domain = QUADAS2_DOMAINS[di];
@@ -467,7 +468,7 @@ export async function generateQuadasPDF(
         styles: {
           fillColor: riskBg(rbR),
           textColor: riskColor(rbR),
-          fontStyle: "bold",
+          fontStyle: "bold" as const,
         },
       },
       {
@@ -475,7 +476,7 @@ export async function generateQuadasPDF(
         styles: {
           fillColor: apR === "N/A" ? [248, 250, 252] : riskBg(apR),
           textColor: apR === "N/A" ? [156, 163, 175] : riskColor(apR),
-          fontStyle: "bold",
+          fontStyle: "bold" as const,
         },
       },
     ]);
@@ -501,7 +502,6 @@ export async function generateQuadasPDF(
     margin: { left: margin, right: margin },
   });
 
-  // @ts-expect-error jspdf-autotable adds lastAutoTable
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
   // Avaliação geral

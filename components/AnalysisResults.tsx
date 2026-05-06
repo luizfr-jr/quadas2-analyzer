@@ -107,16 +107,17 @@ export default function AnalysisResults({ analysis, fileName }: AnalysisResultsP
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      {domain.hasApplicability && data?.applicabilityConcerns ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <RiskDot rating={data.applicabilityConcerns.rating} />
-                          <span className="text-xs font-semibold text-gray-700">
-                            {data.applicabilityConcerns.rating}
+                      {(() => {
+                        const ap = (data as import("@/types/quadas2").DomainAnalysis).applicabilityConcerns;
+                        return domain.hasApplicability && ap ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <RiskDot rating={ap.rating} />
+                            <span className="text-xs font-semibold text-gray-700">{ap.rating}</span>
                           </span>
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );
