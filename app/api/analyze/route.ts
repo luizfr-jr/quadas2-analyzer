@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
 
-    const message = await anthropic.messages.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const requestBody: any = {
       model: "claude-opus-4-5",
       max_tokens: 8192,
       messages: [
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
                 media_type: "application/pdf",
                 data: base64,
               },
-            } as Parameters<typeof anthropic.messages.create>[0]["messages"][0]["content"][0],
+            },
             {
               type: "text",
               text: QUADAS2_PROMPT,
@@ -60,7 +61,9 @@ export async function POST(request: NextRequest) {
           ],
         },
       ],
-    });
+    };
+
+    const message = await anthropic.messages.create(requestBody);
 
     const content = message.content[0];
     if (content.type !== "text") {
