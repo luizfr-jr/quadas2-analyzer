@@ -1,11 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { QUADAS2_PROMPT } from "@/lib/quadas2";
 import { QuadasAnalysis } from "@/types/quadas2";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export const maxDuration = 60;
 
@@ -38,42 +36,19 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const requestBody: any = {
-      model: "claude-opus-4-5",
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: base64,
-              },
-            },
-            {
-              type: "text",
-              text: QUADAS2_PROMPT,
-            },
-          ],
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: "application/pdf",
+          data: base64,
         },
-      ],
-    };
+      },
+      QUADAS2_PROMPT,
+    ]);
 
-    const message = await anthropic.messages.create(requestBody);
-
-    const content = message.content[0];
-    if (content.type !== "text") {
-      return NextResponse.json(
-        { error: "Resposta inesperada da API." },
-        { status: 500 }
-      );
-    }
-
-    let raw = content.text.trim();
+    let raw = result.response.text().trim();
     // Remove markdown code fences if present
     raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
@@ -92,7 +67,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("Analyze error:", err);
     return NextResponse.json(
-      { error: "Erro interno ao processar o PDF." },
+      { error: "Erro interno ao processar o PDF. Verifique se a chave GEMINI_API_KEY está configurada." },
       { status: 500 }
     );
   }
