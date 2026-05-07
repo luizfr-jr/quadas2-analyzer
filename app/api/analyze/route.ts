@@ -1,4 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
+import pdfParse from "pdf-parse";
 import { NextRequest, NextResponse } from "next/server";
 import { QUADAS2_PROMPT } from "@/lib/quadas2";
 import { QuadasAnalysis } from "@/types/quadas2";
@@ -7,10 +8,10 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "Chave GEMINI_API_KEY não configurada no servidor." },
+        { error: "Chave GROQ_API_KEY não configurada no servidor." },
         { status: 500 }
       );
     }
@@ -19,50 +20,48 @@ export async function POST(request: NextRequest) {
     const file = formData.get("pdf") as File | null;
 
     if (!file) {
-      return NextResponse.json(
-        { error: "Nenhum arquivo PDF enviado." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Nenhum arquivo PDF enviado." }, { status: 400 });
     }
 
     if (file.type !== "application/pdf") {
-      return NextResponse.json(
-        { error: "O arquivo deve ser um PDF." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "O arquivo deve ser um PDF." }, { status: 400 });
     }
 
     if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: "O arquivo PDF deve ter no máximo 10 MB." }, { status: 400 });
+    }
+
+    // Extract text from PDF
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const pdfData = await pdfParse(buffer);
+    const articleText = pdfData.text?.trim() ?? "";
+
+    if (articleText.length < 200) {
       return NextResponse.json(
-        { error: "O arquivo PDF deve ter no máximo 10 MB." },
+        { error: "Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada sem OCR." },
         { status: 400 }
       );
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    // Truncate to fit within model context (keep first 25000 chars ≈ ~6000 tokens)
+    const truncated = articleText.slice(0, 25000);
 
-    const ai = new GoogleGenAI({ apiKey });
+    const groq = new Groq({ apiKey });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: [
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
         {
           role: "user",
-          parts: [
-            {
-              inlineData: {
-                mimeType: "application/pdf",
-                data: base64,
-              },
-            },
-            { text: QUADAS2_PROMPT },
-          ],
+          content: `Você receberá o texto extraído de um artigo científico de acurácia diagnóstica. Aplique rigorosamente a metodologia QUADAS-2 conforme as instruções abaixo.\n\n=== TEXTO DO ARTIGO ===\n${truncated}\n\n=== INSTRUÇÕES QUADAS-2 ===\n${QUADAS2_PROMPT}`,
         },
       ],
+      max_tokens: 8000,
+      temperature: 0.1,
     });
 
-    let raw = (response.text ?? "").trim();
+    let raw = (completion.choices[0]?.message?.content ?? "").trim();
     // Remove markdown code fences if present
     raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
