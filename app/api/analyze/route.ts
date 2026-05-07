@@ -3,12 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { QUADAS2_PROMPT } from "@/lib/quadas2";
 import { QuadasAnalysis } from "@/types/quadas2";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Chave GEMINI_API_KEY não configurada no servidor." },
+        { status: 500 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("pdf") as File | null;
 
@@ -36,7 +42,8 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const result = await model.generateContent([
       {
@@ -56,18 +63,19 @@ export async function POST(request: NextRequest) {
     try {
       analysis = JSON.parse(raw);
     } catch {
-      console.error("JSON parse error. Raw:", raw.slice(0, 500));
+      console.error("JSON parse error. Raw response:", raw.slice(0, 800));
       return NextResponse.json(
-        { error: "Falha ao interpretar a análise. Tente novamente." },
+        { error: "O modelo retornou uma resposta inválida. Tente novamente." },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ analysis, fileName: file.name });
-  } catch (err) {
-    console.error("Analyze error:", err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Analyze error:", message);
     return NextResponse.json(
-      { error: "Erro interno ao processar o PDF. Verifique se a chave GEMINI_API_KEY está configurada." },
+      { error: `Erro ao processar: ${message}` },
       { status: 500 }
     );
   }
