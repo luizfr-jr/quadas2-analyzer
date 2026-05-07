@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Truncate to fit within model context (keep first 25000 chars ≈ ~6000 tokens)
-    const truncated = articleText.slice(0, 25000);
+    // Keep ~9000 chars to stay within free-tier TPM (article ≈ 2250 tokens + prompt ≈ 1500 + response ≈ 3500 ≈ 7250 total)
+    const truncated = articleText.slice(0, 9000);
 
     const groq = new Groq({ apiKey });
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
           content: `Você receberá o texto extraído de um artigo científico de acurácia diagnóstica. Aplique rigorosamente a metodologia QUADAS-2 conforme as instruções abaixo.\n\n=== TEXTO DO ARTIGO ===\n${truncated}\n\n=== INSTRUÇÕES QUADAS-2 ===\n${QUADAS2_PROMPT}`,
         },
       ],
-      max_tokens: 8000,
+      max_tokens: 3500,
       temperature: 0.1,
     });
 
