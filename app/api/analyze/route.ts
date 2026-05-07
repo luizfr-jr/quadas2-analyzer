@@ -1,16 +1,18 @@
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
+import pdfParse from "pdf-parse";
 import { NextRequest, NextResponse } from "next/server";
 import { QUADAS2_PROMPT } from "@/lib/quadas2";
+import { extractRelevantText } from "@/lib/extractSections";
 import { QuadasAnalysis } from "@/types/quadas2";
 
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "Chave GEMINI_API_KEY não configurada no servidor." },
+        { error: "Chave GROQ_API_KEY não configurada no servidor." },
         { status: 500 }
       );
     }
@@ -30,31 +32,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "O arquivo PDF deve ter no máximo 10 MB." }, { status: 400 });
     }
 
+    // Extract text from PDF
     const arrayBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const buffer = Buffer.from(arrayBuffer);
+    const pdfData = await pdfParse(buffer);
+    const fullText = pdfData.text?.trim() ?? "";
 
-    const ai = new GoogleGenAI({ apiKey });
+    if (fullText.length < 200) {
+      return NextResponse.json(
+        { error: "Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada sem OCR." },
+        { status: 400 }
+      );
+    }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: [
+    // Extract the most relevant sections (Abstract + Methods + Results)
+    // ~18000 chars ≈ 4500 tokens + ~1500 (prompt) + ~3500 (response) = ~9500 total < 12k TPM
+    const relevantText = extractRelevantText(fullText, 18000);
+
+    const groq = new Groq({ apiKey });
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
         {
           role: "user",
-          parts: [
-            {
-              inlineData: {
-                mimeType: "application/pdf",
-                data: base64,
-              },
-            },
-            { text: QUADAS2_PROMPT },
-          ],
+          content: `Você receberá as seções mais relevantes de um artigo científico de acurácia diagnóstica (Abstract, Métodos, Resultados). Aplique rigorosamente a metodologia QUADAS-2 conforme as instruções abaixo.\n\n=== CONTEÚDO DO ARTIGO ===\n${relevantText}\n\n=== INSTRUÇÕES QUADAS-2 ===\n${QUADAS2_PROMPT}`,
         },
       ],
+      max_tokens: 3500,
+      temperature: 0.1,
     });
 
-    let raw = (response.text ?? "").trim();
-    // Remove markdown code fences if present
+    let raw = (completion.choices[0]?.message?.content ?? "").trim();
     raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
     let analysis: QuadasAnalysis;
