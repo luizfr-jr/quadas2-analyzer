@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 import { QUADAS2_PROMPT } from "@/lib/quadas2";
 import { QuadasAnalysis } from "@/types/quadas2";
@@ -42,20 +42,27 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const ai = new GoogleGenAI({ apiKey });
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: "application/pdf",
-          data: base64,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: "application/pdf",
+                data: base64,
+              },
+            },
+            { text: QUADAS2_PROMPT },
+          ],
         },
-      },
-      QUADAS2_PROMPT,
-    ]);
+      ],
+    });
 
-    let raw = result.response.text().trim();
+    let raw = (response.text ?? "").trim();
     // Remove markdown code fences if present
     raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
@@ -63,7 +70,7 @@ export async function POST(request: NextRequest) {
     try {
       analysis = JSON.parse(raw);
     } catch {
-      console.error("JSON parse error. Raw response:", raw.slice(0, 800));
+      console.error("JSON parse error. Raw:", raw.slice(0, 800));
       return NextResponse.json(
         { error: "O modelo retornou uma resposta inválida. Tente novamente." },
         { status: 500 }
